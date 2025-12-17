@@ -13,6 +13,10 @@ var showTime = null;
 var showDate = null;
 var priceID = null;
 
+// 新增全局变量
+var memberID = null; 
+var snackCart = []; 
+
 function login(){
 	if(username === null){
 		username = $("[name='username']")[0].value;
@@ -30,23 +34,74 @@ function login(){
 			$('.module').html(response);
 			$('.module').addClass('module-after-login');
 			$('.login-header').addClass('after-login');
-			$('#datepicker-cashier').pickadate({
-				min : new Date(),
-				formatSubmit: 'yyyy-mm-dd', 
- 				hiddenName: true,
- 				placeholder: '选择日期',
- 				onSet: function( event ) {
- 					if ( event.select ) {
- 						$('#datepicker-cashier').prop('disabled', true);
- 						getMoviesShowingOnDate(this.get('select', 'yyyy-mm-dd' ));
- 					}
- 				}
-			});
+			if(username == 'cashier'){
+				initCashier();
+			}
 		}
 	});
 }
 
-// Functions for cashier
+// --- 收银员功能 ---
+
+function initCashier(){
+	$('#datepicker-cashier').pickadate({
+		min : new Date(),
+		formatSubmit: 'yyyy-mm-dd', 
+		hiddenName: true,
+		placeholder: '选择日期',
+		onSet: function( event ) {
+			if ( event.select ) {
+				$('#datepicker-cashier').prop('disabled', true);
+				getMoviesShowingOnDate(this.get('select', 'yyyy-mm-dd' ));
+			}
+		}
+	});
+	loadSnacks(); 
+}
+
+// 1. 会员功能
+function checkMember(){
+	var phone = $('#member-phone').val();
+	if(!phone) return;
+	$.ajax({
+		type: 'POST',
+		url: '/checkMember',
+		data: {'phone': phone},
+		success: function(data){
+			if(data.status == 'found'){
+				memberID = data.id;
+				$('#member-info').html('<span style="color:lightgreen; font-weight:bold">会员: ' + data.name + ' (积分: ' + data.points + ')</span>');
+				$('#member-section input, #member-section button').prop('disabled', true);
+			} else {
+				$('#member-info').html('<span style="color:orange">未找到会员</span> <button onclick="showRegister()" class="btn btn-sm btn-info">注册</button>');
+			}
+		}
+	});
+}
+
+function showRegister(){
+	$('#member-info').html('<input id="new-member-name" placeholder="姓名" style="width:100px; color:black"> <button onclick="registerMember()" class="btn btn-sm btn-success">确认注册</button>');
+}
+
+function registerMember(){
+	var phone = $('#member-phone').val();
+	var name = $('#new-member-name').val();
+	$.ajax({
+		type: 'POST',
+		url: '/registerMember',
+		data: {'phone': phone, 'name': name},
+		success: function(data){
+			if(data.status == 'success'){
+				memberID = data.id;
+				$('#member-info').html('<span style="color:lightgreen">注册成功: ' + name + '</span>');
+			} else {
+				alert(data.msg);
+			}
+		}
+	});
+}
+
+// 2. 购票流程
 function getMoviesShowingOnDate(mdate){
 	date = mdate;
 	$.ajax({
@@ -77,11 +132,7 @@ function selectMovie(movID, mtype){
 }
 function selectTiming(mshowID){
     showID = mshowID;
-    
-
     $('#timings-for-movie button').prop('disabled', true);
-    
-
     getSeats();
 }
 function getSeats(){
@@ -116,7 +167,8 @@ function confirmBooking(){
 		data: {
 			'showID' : showID,
 			'seatNo' : seatNo,
-			'seatClass' : seatClass
+			'seatClass' : seatClass,
+			'memberID': memberID 
 			},
 		success: function(response){
 			$('#available-seats button').prop('disabled', true);
@@ -125,9 +177,70 @@ function confirmBooking(){
 	});
 }
 
-// Functions for manager
+// 3. 小吃功能
+function loadSnacks(){
+	$.ajax({
+		type: 'POST',
+		url: '/getSnacks',
+		success: function(data){
+			var html = '<h6 style="color:gold">小吃菜单 (Snacks)</h6>';
+			data.forEach(function(item){
+				html += `<button class="btn btn-sm btn-outline-light m-1" onclick="addToCart(${item.id}, '${item.name}', ${item.price})">${item.name} <br> ¥${item.price}</button>`;
+			});
+			$('#snack-list').html(html);
+		}
+	});
+}
+
+function addToCart(id, name, price){
+	var found = false;
+	snackCart.forEach(function(item){
+		if(item.id == id){
+			item.qty++;
+			found = true;
+		}
+	});
+	if(!found){
+		snackCart.push({'id': id, 'name': name, 'price': price, 'qty': 1});
+	}
+	renderCart();
+}
+
+function renderCart(){
+	var html = '<h6>购物车</h6><ul style="list-style:none; padding-left:0">';
+	var total = 0;
+	snackCart.forEach(function(item){
+		if(item.qty > 0){
+			html += `<li>${item.name} x ${item.qty} = ¥${item.price * item.qty}</li>`;
+			total += item.price * item.qty;
+		}
+	});
+	html += `</ul><p style="font-weight:bold; color:gold">总计: ¥${total}</p>`;
+	if(total > 0) html += `<button onclick="buySnacks()" class="btn btn-warning btn-sm">结算小吃</button> <button onclick="clearCart()" class="btn btn-danger btn-sm">清空</button>`;
+	$('#snack-cart').html(html);
+}
+
+function clearCart(){
+	snackCart = [];
+	renderCart();
+}
+
+function buySnacks(){
+	$.ajax({
+		type: 'POST',
+		url: '/buySnacks',
+		data: {'cart': JSON.stringify(snackCart)},
+		success: function(response){
+			alert('小吃购买成功! 总价: ¥' + response.cost);
+			clearCart();
+		}
+	});
+}
+
+// --- 经理功能 ---
+
 function viewBookedTickets(){
-	$('#options button').prop('disabled', true);
+	resetManager();
 	$('#manager-dynamic-1').html('<input id="datepicker-manager-1" placeholder="选择查看日期">');
 	$('#datepicker-manager-1').pickadate({
 				formatSubmit: 'yyyy-mm-dd', 
@@ -164,7 +277,7 @@ function selectShow(mshowID){
 	});
 }
 function insertMovie(){
-	$('#options button').prop('disabled', true);
+	resetManager();
 	$.ajax({
 		type: 'GET',
 		url: '/fetchMovieInsertForm',
@@ -224,7 +337,7 @@ function filledMovieForm(){
 	}
 }
 function createShow(){
-	$('#options button').prop('disabled', true);
+	resetManager();
 	$('#manager-dynamic-1').html('<input id="datepicker-manager-3" placeholder="选择排片日期"><input id="timepicker-manager-1" placeholder="选择开场时间"><button onclick="getValidMovies()">查询</button>');
 	$('#datepicker-manager-3').pickadate({
 				formatSubmit: 'yyyy-mm-dd', 
@@ -310,7 +423,7 @@ function selectShowHall(hall){
 		});
 }
 function alterPricing(){
-	$('#options button').prop('disabled', true);
+	resetManager();
 	$.ajax({
 			type: 'GET',
 			url: '/getPriceList',
@@ -337,4 +450,57 @@ function changePrice(){
 				$('#manager-dynamic-3').html(response);
 			}
 		});
+}
+
+// 4. 经理管理小吃
+function manageSnacks(){
+	resetManager();
+	$('#manager-dynamic-1').html(`
+		<h6>添加新小吃</h6>
+		<input id="snack-name" placeholder="名称" style="color:black">
+		<input id="snack-price" placeholder="价格" type="number" style="color:black">
+		<button onclick="addSnack()">添加</button>
+		<hr>
+		<div id="manager-snack-list"></div>
+	`);
+	loadManagerSnacks();
+}
+
+function addSnack(){
+	var name = $('#snack-name').val();
+	var price = $('#snack-price').val();
+	$.ajax({
+		type: 'POST',
+		url: '/insertSnack',
+		data: {'name': name, 'price': price},
+		success: function(resp){
+			loadManagerSnacks();
+			$('#snack-name').val('');
+			$('#snack-price').val('');
+		}
+	});
+}
+
+function loadManagerSnacks(){
+	$.ajax({
+		type: 'GET',
+		url: '/getSnacks',
+		success: function(data){
+			var html = '<h6>现有小吃</h6><ul>';
+			data.forEach(function(item){
+				html += `<li>${item.name} - ¥${item.price}</li>`;
+			});
+			html += '</ul>';
+			$('#manager-snack-list').html(html);
+		}
+	});
+}
+
+function resetManager(){
+	$('#manager-dynamic-1').html('');
+	$('#manager-dynamic-2').html('');
+	$('#manager-dynamic-3').html('');
+	$('#manager-dynamic-4').html('');
+	$('#manager-dynamic-5').html('');
+	$('#options button').prop('disabled', false);
 }
