@@ -3,7 +3,7 @@ USE db_theatre;
 
 SET foreign_key_checks=0;
 
--- 删除旧表 (重置结构)
+-- 删除旧表 
 DROP TABLE IF EXISTS movie_genres;
 DROP TABLE IF EXISTS booked_tickets;
 DROP TABLE IF EXISTS shows;
@@ -12,9 +12,9 @@ DROP TABLE IF EXISTS hall_seats;
 DROP TABLE IF EXISTS halls;
 DROP TABLE IF EXISTS movies;
 DROP TABLE IF EXISTS types;
-DROP TABLE IF EXISTS members;      -- 新增
-DROP TABLE IF EXISTS snack_sales;  -- 新增
-DROP TABLE IF EXISTS snacks;       -- 新增
+DROP TABLE IF EXISTS members;      
+DROP TABLE IF EXISTS snack_sales;  
+DROP TABLE IF EXISTS snacks;       
 
 -- 1. 影厅表
 CREATE TABLE halls (
@@ -69,7 +69,7 @@ CREATE TABLE shows (
     FOREIGN KEY(hall_id) REFERENCES halls(hall_id) ON DELETE CASCADE
 );
 
--- 7. [新增] 会员表
+-- 7. 会员表
 CREATE TABLE members (
     member_id INT PRIMARY KEY AUTO_INCREMENT,
     name VARCHAR(50),
@@ -77,7 +77,7 @@ CREATE TABLE members (
     points INT DEFAULT 0
 );
 
--- 8. [修改] 订单表 (增加 member_id 外键)
+-- 8. 订单表 
 CREATE TABLE booked_tickets (
     ticket_no INT PRIMARY KEY,
     show_id INT,
@@ -87,14 +87,14 @@ CREATE TABLE booked_tickets (
     FOREIGN KEY(member_id) REFERENCES members(member_id) ON DELETE SET NULL
 );
 
--- 9. [新增] 小吃表
+-- 9.  小吃表
 CREATE TABLE snacks (
     snack_id INT PRIMARY KEY AUTO_INCREMENT,
     snack_name VARCHAR(50),
     price INT
 );
 
--- 10. [新增] 小吃销售记录
+-- 10.  小吃销售记录
 CREATE TABLE snack_sales (
     sale_id INT PRIMARY KEY AUTO_INCREMENT,
     snack_id INT,
@@ -194,3 +194,4 @@ BEGIN
     DELETE FROM shows WHERE show_date < CURDATE();
 END; //
 DELIMITER ;
+
