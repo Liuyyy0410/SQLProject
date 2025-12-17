@@ -75,14 +75,12 @@ def registerMember():
 
 @app.route('/getSnacks', methods=['GET', 'POST'])
 def getSnacks():
-    # 获取小吃列表
     snacks = runQuery("SELECT * FROM snacks")
     data = [{'id': s[0], 'name': s[1], 'price': s[2]} for s in snacks]
     return jsonify(data)
 
 @app.route('/buySnacks', methods=['POST'])
 def buySnacks():
-    # 结算购物车
     cart = json.loads(request.form['cart'])
     total_cost = 0
     for item in cart:
@@ -94,7 +92,6 @@ def buySnacks():
                 price = price_res[0][0]
                 total_cost += price * qty
                 runQuery("INSERT INTO snack_sales (snack_id, quantity) VALUES (%s, %s)", (snack_id, qty), fetch=False)
-    
     return jsonify({'status': 'success', 'cost': total_cost})
 
 @app.route('/insertSnack', methods=['POST'])
@@ -120,7 +117,6 @@ def timingsForMovie():
     date = request.form['date']
     movieID = request.form['movieID']
     movieType = request.form['type']
-    
     sql = """
         SELECT s.time, s.show_id, s.hall_id 
         FROM shows s 
@@ -128,7 +124,6 @@ def timingsForMovie():
         ORDER BY s.time
     """
     res = runQuery(sql, (date, movieID, movieType))
-    
     timings = []
     for i in res:
         time_int = i[0]
@@ -136,7 +131,6 @@ def timingsForMovie():
         h_id = i[2]
         display_text = f"{int(time_int/100)}:{time_int%100:02d} ({h_id}号厅)"
         timings.append((s_id, display_text))
-
     return render_template('timings.html', timings=timings)
 
 @app.route('/getAvailableSeats', methods=['POST'])
@@ -144,26 +138,21 @@ def getSeating():
     showID = request.form['showID']
     sql_hall = "SELECT hs.class, hs.total_seats FROM shows s JOIN hall_seats hs ON s.hall_id = hs.hall_id WHERE s.show_id = %s"
     res_hall = runQuery(sql_hall, (showID,))
-    
     totalGold = totalStandard = 0
     for row in res_hall:
         if row[0] == 'gold': totalGold = row[1]
         elif row[0] == 'standard': totalStandard = row[1]
-
     sql_booked = "SELECT seat_no FROM booked_tickets WHERE show_id = %s"
     res_booked = runQuery(sql_booked, (showID,))
     booked_set = {r[0] for r in res_booked}
-
     goldSeats = [[i, 'disabled' if (i + 1000) in booked_set else ''] for i in range(1, totalGold + 1)]
     standardSeats = [[i, 'disabled' if i in booked_set else ''] for i in range(1, totalStandard + 1)]
-
     return render_template('seating.html', goldSeats=goldSeats, standardSeats=standardSeats)
 
 @app.route('/getPrice', methods=['POST'])
 def getPriceForClass():
     showID = request.form['showID']
     seatClass = request.form['seatClass']
-
     sql = """
         SELECT p.price 
         FROM shows s 
@@ -172,12 +161,9 @@ def getPriceForClass():
         WHERE s.show_id = %s
     """
     res = runQuery(sql, (showID,))
-
     if not res: return '<h5>未找到价格信息</h5>'
-
     base_price = int(res[0][0])
     final_price = base_price * 1.5 if seatClass == 'gold' else base_price
-
     return f'<h5>票价: ¥ {int(final_price)}</h5><button onclick="confirmBooking()" class="btn btn-success">确认预订</button>'
 
 @app.route('/insertBooking', methods=['POST'])
@@ -185,7 +171,7 @@ def createBooking():
     showID = request.form['showID']
     seatClass = request.form['seatClass']
     rawSeatNo = int(request.form['seatNo'])
-    memberID = request.form.get('memberID') # 获取会员ID
+    memberID = request.form.get('memberID') 
     
     finalSeatNo = rawSeatNo + 1000 if seatClass == 'gold' else rawSeatNo
 
@@ -193,12 +179,12 @@ def createBooking():
     while runQuery("SELECT ticket_no FROM booked_tickets WHERE ticket_no=%s", (ticketNo,)):
         ticketNo = randint(0, 2147483646)
     
-    # 插入订单，如果是会员则记录ID并加分
+    # 核心修改：只负责插入订单。
+    # 积分更新逻辑已移除，由 MySQL 触发器 'trigger_add_points' 自动处理。
     if memberID and memberID != 'null':
         runQuery("INSERT INTO booked_tickets (ticket_no, show_id, seat_no, member_id) VALUES (%s, %s, %s, %s)", 
                  (ticketNo, showID, finalSeatNo, memberID), fetch=False)
-        runQuery("UPDATE members SET points = points + 10 WHERE member_id = %s", (memberID,), fetch=False)
-        msg_point = "<br><span style='color:green'>会员积分 +10</span>"
+        msg_point = "<br><span style='color:#28a745'>会员积分 +10 (触发器自动处理)</span>"
     else:
         runQuery("INSERT INTO booked_tickets (ticket_no, show_id, seat_no) VALUES (%s, %s, %s)", 
                  (ticketNo, showID, finalSeatNo), fetch=False)
@@ -221,7 +207,6 @@ def getShowsOnDate():
 @app.route('/getBookedWithShowID', methods=['POST'])
 def getBookedTickets():
     showID = request.form['showID']
-    # 经理查看时显示会员名
     sql = """
         SELECT b.ticket_no, b.seat_no, m.name 
         FROM booked_tickets b 
@@ -230,7 +215,6 @@ def getBookedTickets():
         ORDER BY b.seat_no
     """
     res = runQuery(sql, (showID,))
-    
     tickets = []
     if res:
         for t in res:
@@ -239,7 +223,6 @@ def getBookedTickets():
             display_seat = s_no - 1000 if s_no > 1000 else s_no
             member_str = f" ({m_name})" if m_name else ""
             tickets.append([t_no, f"{display_seat}{member_str}", s_class])
-            
     return render_template('bookedtickets.html', tickets=tickets) if tickets else '<h5>暂无预订</h5>'
 
 @app.route('/fetchMovieInsertForm', methods=['GET'])
@@ -254,17 +237,13 @@ def insertMovie():
     genres = request.form['types'].split() 
     startShowing = request.form['startShowing']
     endShowing = request.form['endShowing']
-
     check = runQuery("SELECT * FROM movies WHERE movie_name=%s", (movieName,))
     if check: return '<h5>电影已存在</h5>'
-
     movieID = randint(0, 2147483646)
     runQuery("INSERT INTO movies VALUES (%s, %s, %s, %s, %s, %s)", 
              (movieID, movieName, movieLen, movieLang, startShowing, endShowing), fetch=False)
-
     for g in genres:
         runQuery("INSERT INTO movie_genres (movie_id, genre) VALUES (%s, %s)", (movieID, g), fetch=False)
-
     return f'<h5>电影添加成功</h5><h6>ID: {movieID}</h6>'
 
 @app.route('/getValidMovies', methods=['POST'])
@@ -272,14 +251,12 @@ def validMovies():
     showDate = request.form['showDate']
     sql = "SELECT movie_id, movie_name, length, language FROM movies WHERE show_start <= %s AND show_end >= %s"
     movies = runQuery(sql, (showDate, showDate))
-    
     final_movies = []
     if movies:
         for m in movies:
             g_res = runQuery("SELECT genre FROM movie_genres WHERE movie_id = %s", (m[0],))
             genres_str = " ".join([x[0] for x in g_res])
             final_movies.append((m[0], m[1], genres_str, m[2], m[3]))
-            
     return render_template('validmovies.html', movies=final_movies) if final_movies else '<h5>无可用电影</h5>'
 
 @app.route('/getHallsAvailable', methods=['POST'])
@@ -287,23 +264,18 @@ def getHalls():
     movieID = request.form['movieID']
     showDate = request.form['showDate']
     showTime = int(request.form['showTime'])
-    
     movieLen = runQuery("SELECT length FROM movies WHERE movie_id = %s", (movieID,))[0][0]
     startMin = int(showTime / 100) * 60 + (showTime % 100)
     endMin = startMin + movieLen
-    
     shows = runQuery("SELECT s.hall_id, m.length, s.time FROM shows s JOIN movies m ON s.movie_id=m.movie_id WHERE s.show_date=%s", (showDate,))
-    
     busy_halls = set()
     for s in shows:
         s_start = int(s[2]/100)*60 + (s[2]%100)
         s_end = s_start + s[1]
         if not (endMin <= s_start or startMin >= s_end):
             busy_halls.add(s[0])
-            
     all_halls = {r[0] for r in runQuery("SELECT hall_id FROM halls")}
     available = list(all_halls - busy_halls)
-    
     return render_template('availablehalls.html', halls=available) if available else '<h5>无可用影厅</h5>'
 
 @app.route('/insertShow', methods=['POST'])
